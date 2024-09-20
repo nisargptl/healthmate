@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HealthMate - Chatbot</title>
+    {% load static %}
+    <link rel="stylesheet" href="{% static '/styles.css' %}">
+</head>
+<body>
+    <div class="container">
+        <div class="chat-header">
+            Welcome to HealthMate
+        </div>
+        <div id="chat-box" class="chat-box">
+            <!-- Loading spinner -->
+            <div id="loading-spinner" class="spinner" style="display:none;"></div>
+        </div>
+
+        <form id="chat-form" class="chat-form">
+            <input type="text" id="user-message" placeholder="Ask something about your health..." required>
+            <button type="submit">Send</button>
+        </form>
+    </div>
+
+    <script>
+        const form = document.getElementById('chat-form');
+        const chatBox = document.getElementById('chat-box');
+        const spinner = document.getElementById('loading-spinner');
+    
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const message = document.getElementById('user-message').value;
+    
+            // Add user's message to chat
+            addMessageToChat('user', message);
+    
+            // Show loading spinner
+            spinner.style.display = 'block';
+    
+            // Send the message to the backend
+            const response = await fetch('', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'X-CSRFToken': '{{ csrf_token }}'
+                },
+                body: new URLSearchParams({ message })
+            });
+    
+            const data = await response.json();
+    
+            // Hide loading spinner
+            spinner.style.display = 'none';
+    
+            // Add bot's message to chat
+            addMessageToChat('bot', data.response);
+        });
+    
+        function addMessageToChat(sender, message) {
+            const messageElement = document.createElement('div');
+            messageElement.classList.add('chat-message');
+    
+            // Get the current time
+            const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    
+            // Create message bubble with timestamp
+            const content = `
+                <p>${message}</p>
+                <span class="timestamp">${time}</span>
+            `;
+    
+            messageElement.innerHTML = content;
+    
+            if (sender === 'user') {
+                messageElement.classList.add('user-message');
+            } else {
+                messageElement.classList.add('bot-message');
+            }
+    
+            chatBox.appendChild(messageElement);
+            chatBox.scrollTop = chatBox.scrollHeight;  // Auto scroll to the bottom
+            document.getElementById('user-message').value = '';  // Clear input field
+        }
+    </script>
+    
+</body>
+</html>
