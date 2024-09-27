@@ -6,38 +6,55 @@
     <title>HealthMate - Chatbot</title>
     {% load static %}
     <link rel="stylesheet" href="{% static '/styles.css' %}">
+    <script src="https://cdn.jsdelivr.net/npm/showdown@1.9.1/dist/showdown.min.js"></script>
 </head>
 <body>
     <div class="container">
-        <div class="chat-header">
-            Welcome to HealthMate
-        </div>
-        <div id="chat-box" class="chat-box">
-            <!-- Loading spinner -->
-            <div id="loading-spinner" class="spinner" style="display:none;"></div>
-        </div>
+        <!-- Chatbox Section -->
+        <div class="chat-container">
+            <div class="chat-header">
+                <h1>Welcome to HealthMate</h1>
+            </div>
 
-        <form id="chat-form" class="chat-form">
-            <input type="text" id="user-message" placeholder="Ask something about your health..." required>
-            <button type="submit">Send</button>
-        </form>
+            <div id="chat-box" class="chat-box">
+                <!-- Loading spinner -->
+                <div id="loading-spinner" class="spinner" style="display:none;"></div>
+            </div>
+
+            <form id="chat-form" class="chat-form">
+                <input type="text" id="user-message" placeholder="Ask something about your health..." required>
+                <button type="submit">Send</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal for displaying additional information -->
+    <div id="additional-info-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-button" id="close-button">&times;</span>
+            <h2>Additional Information</h2>
+            <div id="additional-info-content"></div>
+        </div>
     </div>
 
     <script>
         const form = document.getElementById('chat-form');
         const chatBox = document.getElementById('chat-box');
         const spinner = document.getElementById('loading-spinner');
-    
+        const modal = document.getElementById('additional-info-modal');
+        const modalContent = document.getElementById('additional-info-content');
+        const closeButton = document.getElementById('close-button');
+
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
             const message = document.getElementById('user-message').value;
-    
+
             // Add user's message to chat
             addMessageToChat('user', message);
-    
+
             // Show loading spinner
             spinner.style.display = 'block';
-    
+
             // Send the message to the backend
             const response = await fetch('', {
                 method: 'POST',
@@ -45,44 +62,73 @@
                     'Content-Type': 'application/x-www-form-urlencoded',
                     'X-CSRFToken': '{{ csrf_token }}'
                 },
-                body: new URLSearchParams({ message })
+                body: new URLSearchParams({ message, patient_email: 'john.doe@example.com' })  // Include patient_email in request
             });
-    
+
             const data = await response.json();
-    
+
             // Hide loading spinner
             spinner.style.display = 'none';
-    
+
             // Add bot's message to chat
             addMessageToChat('bot', data.response);
+
+            // Display additional information if present
+            if (data.additional_info) {
+                showModal(data.additional_info);
+            }
         });
-    
+
         function addMessageToChat(sender, message) {
             const messageElement = document.createElement('div');
             messageElement.classList.add('chat-message');
-    
+
             // Get the current time
             const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    
-            // Create message bubble with timestamp
+
+            // Create a new instance of the showdown converter
+            const converter = new showdown.Converter();
+
+            // Convert the message from Markdown to HTML
+            const htmlMessage = converter.makeHtml(message);
+
+            // Set innerHTML to render HTML properly
             const content = `
-                <p>${message}</p>
+                <div>${htmlMessage}</div>
                 <span class="timestamp">${time}</span>
             `;
-    
-            messageElement.innerHTML = content;
-    
+
+            messageElement.innerHTML = content;  // Use innerHTML to render the converted HTML
+
             if (sender === 'user') {
                 messageElement.classList.add('user-message');
             } else {
                 messageElement.classList.add('bot-message');
             }
-    
+
             chatBox.appendChild(messageElement);
             chatBox.scrollTop = chatBox.scrollHeight;  // Auto scroll to the bottom
             document.getElementById('user-message').value = '';  // Clear input field
         }
+
+        function showModal(info) {
+            // Display additional information in the modal
+            modalContent.innerHTML = `<p>${info}</p>`;
+            modal.style.display = 'block';
+        }
+
+        // Close the modal when the close button is clicked
+        closeButton.addEventListener('click', () => {
+            modal.style.display = 'none';
+        });
+
+        // Close the modal when clicking outside the modal content
+        window.addEventListener('click', (event) => {
+            if (event.target === modal) {
+                modal.style.display = 'none';
+            }
+        });
     </script>
-    
+
 </body>
 </html>

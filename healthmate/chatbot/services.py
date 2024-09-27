@@ -1,7 +1,7 @@
 import os
 import google.generativeai as genai
 from patients.models import Patient
-
+from healthmate.chatbot.core.healthmate_graph import compile_graph
 class ChatBotService:
     def __init__(self):
         self.api_key = os.getenv("GEMINI_API_KEY")
@@ -25,8 +25,11 @@ class ChatBotService:
         patient_context = (
             f"My name is {patient.first_name} {patient.last_name}. "
             f"I was born on {patient.date_of_birth.strftime('%Y-%m-%d')}. "
+            f"My phone number is {patient.phone_number}. "
+            f"My email address is {patient.email}. "
             f"My medical condition is {patient.medical_condition}. "
             f"I am taking {patient.medication_regimen}. "
+            f"My last appointment was on {patient.last_appointment.strftime('%Y-%m-%d %H:%M')}. "
             f"My next appointment is on {patient.next_appointment.strftime('%Y-%m-%d %H:%M')} "
             f"with {patient.doctor_name}."
         )
