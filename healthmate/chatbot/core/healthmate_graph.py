@@ -17,6 +17,7 @@ from .knowledge_graph import KnowledgeGraph
 from .pinecone_store import PineconeStore
 from patients.models import Patient
 from datetime import datetime
+from IPython.display import Image, display
 
 load_dotenv()
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
@@ -149,28 +150,18 @@ def knowledge_extractor(state):
     return state
 
 def appt_rescheduler(state):
-    try:
-        doctor_name = patient.doctor_name
-    except Patient.DoesNotExist:
-        doctor_name = "Doctor"
     summary = state.get("summary", "")
     if summary:
         system_message = f"Summary of conversation earlier: {summary}"
         state["messages"] = [SystemMessage(content=system_message)] + state["messages"]
-    prompt = f"""Today's date is: {datetime.today().date()} and day is: {datetime.today().date().strftime("%A")}. Gather information about new date and time user wants to reschedule appointment to, once you have it, 
-                RESPOND to the User with “I will convey your request to {doctor_name}.
-                Then call the tool with name "change_state_tool" and pass the new time as argument in "%Y-%m-%d %H:%M:%S" format.
-        """
+    prompt = f"""Today's date is: 09/27/24 and day is: Friday. Gather information about new date and time user wants to reschedule appointment to, once you have it,
+                call the tool with name "change_state_tool" and pass the new time as argument in "%Y-%m-%d %H:%M:%S" format."""
     messages = [SystemMessage(content=prompt)]+state["messages"]
     llm_with_tool = llm.bind_tools([change_state_tool])
     response = llm_with_tool.invoke(messages)
-    print(response)
     message_for_next_tool = ""
     if 'tool_calls' in response.additional_kwargs:
-        message_for_next_tool = f"""Patient {patient.first_name} {patient.last_name} is requesting an appointment change from {patient.next_appointment} to
-                                {extract_state_from_toolcalls(response)}."""
-        patient.next_appointment = datetime.strptime(extract_state_from_toolcalls(response), "%Y-%m-%d %H:%M:%S")
-        patient.save()
+        message_for_next_tool = f"""Patient {patient.first_name} {patient.last_name} is requesting an appointment change from {patient.next_appointment} to {extract_state_from_toolcalls(response)}."""
     return {"messages": [response], "current_state": "appt_rescheduler", "message_for_any_tool": message_for_next_tool}
 
 
@@ -221,9 +212,16 @@ def orchestrator(state):
     return {"messages": [response], "current_state": "orchestrator"}
 
 def change_state(state):
+    try:
+        doctor_name = patient.doctor_name
+    except Patient.DoesNotExist:
+        doctor_name = "Doctor"
     return {"messages": [ToolMessage(
                     content=state["message_for_any_tool"],
-                    tool_call_id=state["messages"][-1].tool_calls[0]["id"])], "current_state": "assistant", "message_for_any_tool": ""}
+                    tool_call_id=state["messages"][-1].tool_calls[0]["id"]),
+                        AIMessage(
+                    content=f"""I will convey your request to {doctor_name}."""
+                        )], "current_state": "assistant", "message_for_any_tool": ""}
 
 
 def final_state(state):
@@ -273,57 +271,70 @@ def router3(state) -> Literal["change_state", "final_state"]:
         return "change_state"
     return "final_state"
 
+
+memory = MemorySaver()
+g = StateGraph(State)
+g.add_node("knowledge_extractor", knowledge_extractor)
+g.add_node("orchestrator", orchestrator)
+g.add_node("assistant", assistant)
+@g.add_node
+def add_appt_rescheduler_tool_message(state: State):
+    return {
+        "messages": [
+            ToolMessage(
+                content="Calling Appointment rescheduler",
+                tool_call_id=state["messages"][-1].tool_calls[0]["id"],
+            )
+        ]
+    }
+@g.add_node
+def add_assistant_tool_message(state: State):
+    return {
+        "messages": [
+            ToolMessage(
+                content="Calling Assistant",
+                tool_call_id=state["messages"][-1].tool_calls[0]["id"],
+            )
+        ]
+    }
+@g.add_node
+def add_end_tool_message(state: State):
+    return {
+        "messages": [
+            ToolMessage(
+                content="Getting in final state",
+                tool_call_id=state["messages"][-1].tool_calls[0]["id"],
+            )
+        ]
+    }
+g.add_node("change_state", change_state)
+g.add_node("appt_rescheduler", appt_rescheduler)
+g.add_node("query_knowledge_graph", query_knowledge_graph)
+g.add_node("final_state", final_state)
+
+g.add_edge(START, "knowledge_extractor")
+g.add_conditional_edges("knowledge_extractor", router1)
+g.add_conditional_edges("orchestrator", router2)
+g.add_conditional_edges("appt_rescheduler", router3)
+g.add_edge("add_appt_rescheduler_tool_message", "appt_rescheduler")
+g.add_edge("add_assistant_tool_message", "assistant")
+g.add_edge("query_knowledge_graph", "assistant")
+g.add_edge("change_state", "final_state")
+g.add_edge("add_end_tool_message", "final_state")
+g.add_edge("assistant", "final_state")
+g.add_edge("final_state", END)
 def compile_graph():
-    memory = MemorySaver()
-    g = StateGraph(State)
-    g.add_node("knowledge_extractor", knowledge_extractor)
-    g.add_node("orchestrator", orchestrator)
-    g.add_node("assistant", assistant)
-    @g.add_node
-    def add_appt_rescheduler_tool_message(state: State):
-        return {
-            "messages": [
-                ToolMessage(
-                    content="Calling Appointment rescheduler",
-                    tool_call_id=state["messages"][-1].tool_calls[0]["id"],
-                )
-            ]
-        }
-    @g.add_node
-    def add_assistant_tool_message(state: State):
-        return {
-            "messages": [
-                ToolMessage(
-                    content="Calling Assistant",
-                    tool_call_id=state["messages"][-1].tool_calls[0]["id"],
-                )
-            ]
-        }
-    @g.add_node
-    def add_end_tool_message(state: State):
-        return {
-            "messages": [
-                ToolMessage(
-                    content="Getting in final state",
-                    tool_call_id=state["messages"][-1].tool_calls[0]["id"],
-                )
-            ]
-        }
-    g.add_node("change_state", change_state)
-    g.add_node("appt_rescheduler", appt_rescheduler)
-    g.add_node("query_knowledge_graph", query_knowledge_graph)
-    g.add_node("final_state", final_state)
-    g.add_edge(START, "knowledge_extractor")
-    g.add_conditional_edges("knowledge_extractor", router1)
-    g.add_conditional_edges("orchestrator", router2)
-    g.add_conditional_edges("appt_rescheduler", router3)
-    g.add_edge("add_appt_rescheduler_tool_message", "appt_rescheduler")
-    g.add_edge("add_assistant_tool_message", "assistant")
-    g.add_edge("query_knowledge_graph", "assistant")
-    g.add_edge("appt_rescheduler", "final_state")
-    g.add_edge("change_state", "final_state")
-    g.add_edge("add_end_tool_message", "final_state")
-    g.add_edge("assistant", "final_state")
-    g.add_edge("final_state", END)
     return g.compile(checkpointer=memory)
+
+def display_graph(graph):
+    display(Image(graph.get_graph().draw_mermaid_png()))
+
+
+
+
+
+
+
+
+
 
