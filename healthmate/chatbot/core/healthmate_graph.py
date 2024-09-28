@@ -246,7 +246,7 @@ def final_state(state):
         kg.close()
         return {"summary": response.content, "messages": delete_messages}
     kg.close()
-
+    return state
 
 
 def router1(state) -> Literal["orchestrator", "appt_rescheduler"]:

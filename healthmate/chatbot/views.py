@@ -20,6 +20,7 @@ first_user_message = True
 
 def landing_page(request):
     global first_user_message
+    summary =""
     if request.method == 'POST':
         additional_message = None
         user_message = request.POST.get('message')
@@ -32,6 +33,10 @@ def landing_page(request):
         for output in graph.stream(input_message, config=config, stream_mode="updates"):
             # print()
             # print(output)
+            if "final_state" in output:
+                if(summary != output['final_state'].get('summary', [])):
+                    summary = output['final_state'].get('summary', [])
+                    print(summary)
             if 'assistant' in output:
                 bot_response = output['assistant'].get('messages', [])[0].content
             elif 'appt_rescheduler' in output:
