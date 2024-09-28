@@ -14,7 +14,7 @@ HealthMate is an AI-powered health assistant that helps users manage their healt
 ## Project Overview
 HealthMate is designed to assist users with the following:
 - Answering health-related queries.
-- Escalate change requests in appointments to Doctor.
+- Escalate change requests to Doctor.
 - Maintaining conversation histories for easy reference.
 - Using an LLM-agnostic design to swap different language models (e.g., OpenAI’s GPT-4 or Mistral models) with ease.
 - Assistant logic graph:
@@ -24,7 +24,7 @@ HealthMate is designed to assist users with the following:
 
 ## Key Features
 - **Conversational Health Assistance:** The chatbot can respond to user queries about health and appointments.
-- **Appointment Management:** Users can raise requests for appointment changes to their doctor.
+- **Change Requests Alerting:** Users can raise requests for appointment or Treatment changes to their doctor.
 - **Conversation History:** Users can view their past interactions, filtered by date, in a side panel, with an added search functionality.
 - **LLM-Agnostic Design:** The project supports multiple LLMs through a unified interface. Currently only OpenAI models are fully supported. Mistral's and Google's are in development.
 - **RAG** Integrated Retrieval Augmented Generation(RAG), allowing chatbot to provide responses from a knowledge base.
@@ -79,7 +79,6 @@ DB_PASSWORD=<your_db_password>
 Apply the database migrations:
 
 ```bash
-cd healthmate
 python manage.py makemigrations
 python manage.py migrate
 ```
@@ -115,6 +114,9 @@ To run the application, follow these steps:
 
 2. **Schedule or Reschedule Appointments:**
    Type phrases like "Can we reschedule my appointment to next Friday?" to initiate the appointment management flow.
+
+3. **Treatment Change Requests:**
+   Type phrases like "Can we increase my current cholesterol medicines dosage?" to initiate the change request management flow.
 
 3. **View Past Conversations:**
    Use the sidebar to view past conversation histories by date. Clicking a date will load the conversations for that particular day.
