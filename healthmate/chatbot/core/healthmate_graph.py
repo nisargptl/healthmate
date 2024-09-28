@@ -80,7 +80,6 @@ def generate_cypher_query_with_llm(user_message, entities, relationships):
 
 
 
-
 class State(TypedDict):
     messages: Annotated[list, add_messages]
     current_state: str
@@ -88,10 +87,17 @@ class State(TypedDict):
     summary: str
     message_for_any_tool: str
 
+@tool
+def change_request_tool():
+    "This is the change_request_tool"
 
 @tool
 def appt_rescheduler_tool():
     "This is the appt_rescheduler_tool"
+
+@tool
+def treatment_change_tool():
+    "This is the treatment_change_tool"
 
 @tool
 def assistant_tool():
@@ -112,42 +118,74 @@ def change_state_tool(state):
 
 def knowledge_extractor(state):
     state["message_counter"]=state["message_counter"]+1
-    if(state["message_counter"]<5): return state
+    if(state["message_counter"]<3): return state
     state["message_counter"]=0
     human_messages_reversed = []
     for message in reversed(state["messages"]):
         if isinstance(message, HumanMessage):
+            print(f"Message: {message.content}")
             human_messages_reversed.append(message.content)
         if len(human_messages_reversed) == 5: 
             break
     human_messages = human_messages_reversed[::-1]
     system_message = f"""
-    Extract ONLY HEALTH RELATED important information about user, their actions, their preferences, their condition, their medication and its related information in format of entities and relationships
-    and TIE EVERY ENTITY TO USER from the following messages by user:
-    Messages: "{human_messages}"
-    Return the result in JSON format as shown below without anything else so that it can be loaded in dictionary:
-    {{
-        "entities": [
-            {{"name": "User", "type": "Person"}},
-            {{"name": "Medication A", "type": "Medication"}},
-        ],
-        "relationships": [
-            {{"from": "User", "to": "Medication A", "relationship": "is taking"}}
-        ]
-    }}
+
+Extract all health-related information about the user, including their conditions, symptoms, medications, treatment preferences, and lifestyle factors that could impact their health, such as pet ownership, exercise habits, or dietary choices. Ensure that all relevant entities and relationships are captured, even if they do not directly mention health issues, but could be related (e.g., "I have a dog named Martha" could be relevant for pet allergies).
+
+Capture the following types of information:
+- Health conditions (e.g., "I have diabetes.")
+- Medications and dosages (e.g., "I am taking 20mg of Lisinopril.")
+- Symptoms or complaints (e.g., "I've been experiencing knee pain.")
+- Treatment protocols or preferences (e.g., "I prefer physiotherapy over medication.")
+- Lifestyle factors (e.g., "I have a dog named Martha.")
+- Any other health or lifestyle-related facts or observations that could impact health (e.g., "I exercise regularly" or "I'm allergic to peanuts.")
+
+Tie every relevant entity back to the user, and ensure all extracted entities and relationships are formatted correctly.
+Input Messages: "{human_messages}"
+Return the result in JSON format as shown below without any other text so that it can be loaded in python dictionary,
+if none return empty JSON:
+{{
+    "entities": [
+        {{"name": "User", "type": "Person"}},
+        {{"name": "Martha", "type": "Pet", "species": "Dog"}},
+        {{"name": "Peanut Allergy", "type": "Allergy"}}
+    ],
+    "relationships": [
+        {{"from": "User", "to": "Martha", "relationship": "owns"}},
+        {{"from": "User", "to": "Peanut Allergy", "relationship": "has"}}
+    ]
+}}
     """
     messages = [SystemMessage(content=system_message)]
     entities_and_relationships = llm.generate_response(messages, bind_tools=False)
-    data = json.loads(entities_and_relationships.content)
+    print(entities_and_relationships)
+    try:
+        if entities_and_relationships.content == "":
+            data = {"entities": [], "relationships": []}
+        data = json.loads(entities_and_relationships.content)
+    except:
+        data = {"entities": [], "relationships": []}
     kg.store_entities_and_relationships(data['entities'], data['relationships'])
     return state
+
+def change_request(state):
+    prompt = """You are just an Orchestrator who will call just ONE TOOL and, you DO NOT PROIDE ANY MESSAGE.
+                Rules to call tools:
+                - **"appt_rescheduler_tool"**: Call this tool if the user expresses any intention to schedule, reschedule, or inquire about an appointment. Example triggers: "I want to reschedule my appointment to next Friday," or "Can I change my appointment time?"
+                - **"treatment_change_tool"**: Call this tool when the user is requesting changes to their treatment plan, medication regimen, or other medical interventions. Example triggers: "I need to change my medication," or "Can you adjust my treatment plan?"
+                """
+    llm.bind_tools([appt_rescheduler_tool, treatment_change_tool])
+    messages = [SystemMessage(content=prompt)] + state["messages"]
+    response = llm.generate_response(messages, bind_tools=True)
+    llm.reset_tools()
+    return {"messages": [response], "current_state": "change_request"}
 
 def appt_rescheduler(state):
     summary = state.get("summary", "")
     if summary:
         system_message = f"Summary of conversation earlier: {summary}"
         state["messages"] = [SystemMessage(content=system_message)] + state["messages"]
-    today_date = datetime.now().strftime("%Y-%m-%d")  # Format as YYYY-MM-DD
+    today_date = datetime.now().strftime("%Y-%m-%d")
     day_name = datetime.now().strftime("%A") 
     prompt = f"""Today's date is: {today_date} and day is: {day_name}. Gather information about new date and time user wants to reschedule appointment to, once you have it,
                 call the tool with name "change_state_tool" and pass the new time as argument in "%Y-%m-%d %H:%M:%S" format."""
@@ -159,6 +197,40 @@ def appt_rescheduler(state):
     if 'tool_calls' in response.additional_kwargs:
         message_for_next_tool = f"""Patient {patient.first_name} {patient.last_name} is requesting an appointment change from {patient.next_appointment} to {extract_state_from_toolcalls(response)}."""
     return {"messages": [response], "current_state": "appt_rescheduler", "message_for_any_tool": message_for_next_tool}
+
+
+def treatment_change(state):
+    summary = state.get("summary", "")
+    if summary:
+        system_message = f"Summary of conversation earlier: {summary}"
+        state["messages"] = [SystemMessage(content=system_message)] + state["messages"]
+    today_date = datetime.now().strftime("%Y-%m-%d")  # Format as YYYY-MM-DD
+    day_name = datetime.now().strftime("%A")
+    prompt = f"""Today's date is: {today_date} and day is: {day_name}. Gather information about what specific treatment changes the user is requesting. 
+    Once you have the necessary details (e.g., medication changes, dosage adjustments, etc.), call the tool with name "change_state_tool" 
+    and pass the changes in a structured format like JSON or key-value pairs."""
+    messages = [SystemMessage(content=prompt)] + state["messages"]
+    llm.bind_tools([change_state_tool])
+    response = llm.generate_response(messages, bind_tools=True)
+    llm.reset_tools()  
+    message_for_next_tool = ""
+    if 'tool_calls' in response.additional_kwargs:
+        treatment_changes = extract_state_from_toolcalls(response)
+        message_for_next_tool = f"""Patient {patient.first_name} {patient.last_name} is requesting the following treatment changes: {treatment_changes}."""
+    return {"messages": [response], "current_state": "treatment_change", "message_for_any_tool": message_for_next_tool}
+
+
+def change_state(state):
+    try:
+        doctor_name = patient.doctor_name
+    except Patient.DoesNotExist:
+        doctor_name = "Doctor"
+    return {"messages": [ToolMessage(
+                    content=state["message_for_any_tool"],
+                    tool_call_id=state["messages"][-1].tool_calls[0]["id"]),
+                        AIMessage(
+                    content=f"""I will convey your request to {doctor_name}."""
+                        )], "current_state": "assistant", "message_for_any_tool": ""}
 
 
 def assistant(state):
@@ -184,7 +256,7 @@ def assistant(state):
     context = []
     for doc in docs:
         context.append(doc.page_content)
-    prompt = f"""You are a health bot assigned to help users with health related queries and give medical advice. Use the following context to assist the user further.
+    prompt = f"""You are a health bot assigned to help users with health related and lifestyle queries and give medical advice. Use the following context to assist the user further.
                         If you don't know the answer, just say that you don't know, don't try to make up an answer.
                         Context: {context}"""
     response = llm.generate_response([SystemMessage(content=prompt)] + state["messages"], bind_tools=False)
@@ -205,40 +277,30 @@ def query_knowledge_graph(state):
 
 
 def orchestrator(state):
-    prompt = """You are just an Orchestrator who calls tools, you don't provide any message.
-                Rules to call tools
-                - "appt_rescheduler_tool": If the user wants to schedule or reschedule their appointment.
-                - "query_knowledge_graph_tool": If the user message is anything related to or asking more about user.
-                - "assistant_tool": If the user message is related to health or friendly talk.
-                - "end_tool": If the user message is off-topic unrelated to health.
+    prompt = """You are just an Orchestrator who will just call ONE tool, and you DONOT PROVIDE ANY MESSAGE
+                Rules to call tools:
+                - "change_request_tool": Call this tool if the user expresses any intention to change their treatment or appointment. Example triggers: "I want to reschedule my appointment to next Friday," or "Can we change my medication?"
+                - "query_knowledge_graph_tool": Call this tool when the user's query is seeking specific information about their health conditions, medications, or other stored health-related details. This is typically triggered by questions about the user's own medical history or related entities. Example triggers: "What medication am I currently taking?" or "Tell me more about my condition."
+                - "assistant_tool": Use this tool if the user is asking a general health-related question, seeking advice, or engaging in a friendly conversation. This includes scenarios where the user is looking for recommendations, explanations, or guidance on health-related topics that don't require accessing stored data. Example triggers: "What should I do if I have a cold?" or "Can you tell me more about managing stress?"
+                - "end_tool": If the user message is off-topic, unrelated, sensitive, or controversial.
+topics"
                 """
-    llm.bind_tools([appt_rescheduler_tool, query_knowledge_graph_tool, assistant_tool, end_tool])
+    llm.bind_tools([change_request_tool, query_knowledge_graph_tool, assistant_tool, end_tool])
     messages = [SystemMessage(content=prompt)] + state["messages"]
     response = llm.generate_response(messages, bind_tools=True)
     llm.reset_tools()
     return {"messages": [response], "current_state": "orchestrator"}
 
-def change_state(state):
-    try:
-        doctor_name = patient.doctor_name
-    except Patient.DoesNotExist:
-        doctor_name = "Doctor"
-    return {"messages": [ToolMessage(
-                    content=state["message_for_any_tool"],
-                    tool_call_id=state["messages"][-1].tool_calls[0]["id"]),
-                        AIMessage(
-                    content=f"""I will convey your request to {doctor_name}."""
-                        )], "current_state": "assistant", "message_for_any_tool": ""}
 
 
 def final_state(state):
     messages = state["messages"]
-    if len(messages) > 10:
+    if len(messages) > 14:
         summary = state.get("summary", "")
         if summary:
             summary_message = (
                 f"This is summary of the conversation to date: {summary}\n\n"
-                "Append to it by taking into account the new messages above, never miss important user information and medical insights:"
+                "Including the previous summary, summarize the new messages above, never miss important user information and medical insights:"
             )
         else:
             summary_message = "Create a summary of the conversation above:"
@@ -251,28 +313,43 @@ def final_state(state):
             if isinstance(m, AIMessage) and "tool_calls" in m.additional_kwargs and (i + 1 < len(state["messages"])) and isinstance(state["messages"][i + 1], ToolMessage):
                 delete_messages.append(RemoveMessage(id=state["messages"][i + 1].id))
         kg.close()
-        return {"summary": response.content, "messages": delete_messages}
+        return {"summary": state.get("summary", "")+response.content, "messages": delete_messages}
     kg.close()
     return state
 
 
-def router1(state) -> Literal["orchestrator", "appt_rescheduler"]:
+def router1(state) -> Literal["orchestrator", "appt_rescheduler", "treatment_change"]:
     if state["current_state"] == "appt_rescheduler":
         return "appt_rescheduler"
+    elif state["current_state"] == "treatment_change":
+        return "treatment_change"
     else:
         return "orchestrator"
 
-def router2(state) -> Literal["add_appt_rescheduler_tool_message", "add_assistant_tool_message", "query_knowledge_graph", "add_end_tool_message"]:
+def router2(state) -> Literal["add_change_request_tool_message", "add_assistant_tool_message", "query_knowledge_graph", "add_end_tool_message"]:
     messages = state["messages"]
-    if isinstance(messages[-1], AIMessage) and "tool_calls" in messages[-1].additional_kwargs and messages[-1].tool_calls[0].get("name") == "appt_rescheduler_tool":
-        return "add_appt_rescheduler_tool_message"
+    if isinstance(messages[-1], AIMessage) and "tool_calls" in messages[-1].additional_kwargs and messages[-1].tool_calls[0].get("name") == "change_request_tool":
+        return "add_change_request_tool_message"
     elif isinstance(messages[-1], AIMessage) and "tool_calls" in messages[-1].additional_kwargs and messages[-1].tool_calls[0].get("name") == "query_knowledge_graph_tool":
         return "query_knowledge_graph"
     elif isinstance(messages[-1], AIMessage) and "tool_calls" in messages[-1].additional_kwargs and messages[-1].tool_calls[0].get("name") == "end_tool":
         return "add_end_tool_message"
     return "add_assistant_tool_message"
 
-def router3(state) -> Literal["change_state", "final_state"]:
+def router3(state) -> Literal["appt_rescheduler", "treatment_change"]:
+    messages = state["messages"]
+    if isinstance(messages[-2], AIMessage) and "tool_calls" in messages[-2].additional_kwargs and messages[-2].tool_calls[0].get("name") == "appt_rescheduler_tool":
+        return "appt_rescheduler"
+    elif isinstance(messages[-2], AIMessage) and "tool_calls" in messages[-2].additional_kwargs and messages[-2].tool_calls[0].get("name") == "treatment_change_tool":
+        return "treatment_change"
+    
+def router4(state) -> Literal["change_state", "final_state"]:
+    messages = state["messages"]
+    if isinstance(messages[-1], AIMessage) and "tool_calls" in messages[-1].additional_kwargs and messages[-1].tool_calls[0].get("name") == "change_state_tool":
+        return "change_state"
+    return "final_state"
+
+def router5(state) -> Literal["change_state", "final_state"]:
     messages = state["messages"]
     if isinstance(messages[-1], AIMessage) and "tool_calls" in messages[-1].additional_kwargs and messages[-1].tool_calls[0].get("name") == "change_state_tool":
         return "change_state"
@@ -285,11 +362,21 @@ g.add_node("knowledge_extractor", knowledge_extractor)
 g.add_node("orchestrator", orchestrator)
 g.add_node("assistant", assistant)
 @g.add_node
-def add_appt_rescheduler_tool_message(state: State):
+def add_change_request_tool_message(state: State):
     return {
         "messages": [
             ToolMessage(
-                content="Calling Appointment rescheduler",
+                content="Will check if the request id for appointment rescheduling or treatment change.",
+                tool_call_id=state["messages"][-1].tool_calls[0]["id"],
+            )
+        ]
+    }
+@g.add_node
+def add_tool_message(state: State):
+    return {
+        "messages": [
+            ToolMessage(
+                content="Need to call the right tool as per user request",
                 tool_call_id=state["messages"][-1].tool_calls[0]["id"],
             )
         ]
@@ -315,15 +402,20 @@ def add_end_tool_message(state: State):
         ]
     }
 g.add_node("change_state", change_state)
+g.add_node("change_request", change_request)
 g.add_node("appt_rescheduler", appt_rescheduler)
+g.add_node("treatment_change", treatment_change)
 g.add_node("query_knowledge_graph", query_knowledge_graph)
 g.add_node("final_state", final_state)
 
 g.add_edge(START, "knowledge_extractor")
 g.add_conditional_edges("knowledge_extractor", router1)
 g.add_conditional_edges("orchestrator", router2)
-g.add_conditional_edges("appt_rescheduler", router3)
-g.add_edge("add_appt_rescheduler_tool_message", "appt_rescheduler")
+g.add_conditional_edges("add_tool_message", router3)
+g.add_conditional_edges("appt_rescheduler", router4)
+g.add_conditional_edges("treatment_change", router5)
+g.add_edge("add_change_request_tool_message", "change_request")
+g.add_edge("change_request", "add_tool_message")
 g.add_edge("add_assistant_tool_message", "assistant")
 g.add_edge("query_knowledge_graph", "assistant")
 g.add_edge("change_state", "final_state")
@@ -334,5 +426,10 @@ g.add_edge("final_state", END)
 def compile_graph():
     return g.compile(checkpointer=memory)
 
-def display_graph(graph):
-    display(Image(graph.get_graph().draw_mermaid_png()))
+def save_graph(graph, file_name='graph.png', output_dir='graphs'):
+    os.makedirs(output_dir, exist_ok=True)
+    graph_image = graph.get_graph().draw_mermaid_png()
+    file_path = os.path.join(output_dir, file_name)
+    with open(file_path, 'wb') as f:
+        f.write(graph_image)
+    print(f"Graph saved at: {file_path}")

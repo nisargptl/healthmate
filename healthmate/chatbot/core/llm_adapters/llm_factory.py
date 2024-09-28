@@ -16,7 +16,6 @@ class LLMFactory:
         api_key = os.getenv('API_KEY')
         model_name = os.getenv('MODEL_NAME')
         temperature = float(os.getenv('TEMPERATURE', 0))
-
         if llm_model == 'openai':
             return OpenAIAdapter(api_key=api_key, model_name=model_name, temperature=temperature)
         elif llm_model == 'googleai':

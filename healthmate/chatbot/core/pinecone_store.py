@@ -1,6 +1,6 @@
 # chatbot/chatbot_logic/pinecone_store.py
 from pinecone import Pinecone
-from langchain.embeddings import HuggingFaceEmbeddings
+from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_pinecone import PineconeVectorStore
 import os
 

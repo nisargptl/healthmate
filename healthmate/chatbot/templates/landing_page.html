@@ -10,6 +10,7 @@
 </head>
 <body>
     <div class="main-grid-container">
+        <!-- Sidebar Section -->
         <div class="sidebar-container">
             <div class="sidebar-header">
                 <h2>Conversation History</h2>
@@ -19,20 +20,34 @@
                     <button class="history-date" onclick="loadConversation('{{ date }}')">{{ date }}</button>
                 {% endfor %}
             </div>
-            
+
+            <!-- Search Box for Conversation History -->
             <div class="search-box">
-                <input type="text" id="search-keyword" placeholder="Search keyword..." />
-                <button onclick="searchConversation()">Search</button>
+                <input type="text" id="search-keyword" class="search-input" placeholder="Search keyword..." onkeyup="handleSearchTyping()" />
+                <button class="search-btn" onclick="searchConversation()">🔍 Search</button>
+                <button class="clear-btn" onclick="clearSearch()">✖️ Clear</button>
             </div>
 
-            <div id="search-results" class="search-results"></div>
+            <!-- Search Options -->
+            <div class="search-options">
+                <label><input type="checkbox" id="search-case-sensitive"> Case-Sensitive</label>
+                <label><input type="checkbox" id="search-filter-user"> User Only</label>
+                <label><input type="checkbox" id="search-filter-bot"> Bot Only</label>
+            </div>
+
+            <!-- Search Results Container -->
+            <div id="search-results" class="search-results">
+                <p id="no-results-message" class="no-results-message" style="display:none;">No results found.</p>
+            </div>
         </div>
 
+        <!-- Chatbox Section -->
         <div class="chat-container">
             <div class="chat-header">
                 <h1>Welcome to HealthMate</h1>
             </div>
             <div id="chat-box" class="chat-box">
+                <!-- Loading Spinner -->
                 <div id="loading-spinner" class="spinner" style="display:none;"></div>
             </div>
             <form id="chat-form" class="chat-form">
@@ -41,6 +56,7 @@
             </form>
         </div>
 
+        <!-- Sidebar for Additional Information -->
         <div id="additional-info-sidebar" class="additional-info-sidebar">
             <div class="sidebar-header">
                 <h2>Additional Information</h2>
@@ -55,9 +71,20 @@
         const spinner = document.getElementById('loading-spinner');
         const additionalInfoSidebar = document.getElementById('additional-info-sidebar');
         const additionalInfoContent = document.getElementById('additional-info-content');
+        const noResultsMessage = document.getElementById('no-results-message');
+
+        function handleSearchTyping() {
+            noResultsMessage.style.display = 'none';
+        }
+
         async function searchConversation() {
             const searchKeyword = document.getElementById('search-keyword').value;
             if (!searchKeyword) return;
+
+            // Capture filter options
+            const caseSensitive = document.getElementById('search-case-sensitive').checked;
+            const filterUser = document.getElementById('search-filter-user').checked;
+            const filterBot = document.getElementById('search-filter-bot').checked;
 
             try {
                 const response = await fetch('/search_conversation_history/', {
@@ -66,7 +93,12 @@
                         'Content-Type': 'application/x-www-form-urlencoded',
                         'X-CSRFToken': '{{ csrf_token }}'
                     },
-                    body: new URLSearchParams({ search_keyword: searchKeyword })
+                    body: new URLSearchParams({
+                        search_keyword: searchKeyword,
+                        case_sensitive: caseSensitive,
+                        filter_user: filterUser,
+                        filter_bot: filterBot
+                    })
                 });
 
                 if (!response.ok) {
@@ -83,18 +115,34 @@
 
         function displaySearchResults(results) {
             const resultsContainer = document.getElementById('search-results');
-            resultsContainer.innerHTML = '';  
+            resultsContainer.innerHTML = '';
+
+            if (results.length === 0) {
+                noResultsMessage.style.display = 'block';
+                return;
+            }
+
             results.forEach(result => {
                 const resultItem = document.createElement('div');
                 resultItem.classList.add('result-item');
-                resultItem.innerHTML = `<p><strong>${result.date}</strong> - ${result.sender}: ${result.message}</p>`;
+                resultItem.innerHTML = `<p><strong>${result.date}</strong> - ${result.sender}: ${highlightText(result.message, result.keyword)}</p>`;
                 resultsContainer.appendChild(resultItem);
             });
         }
+
+        function highlightText(text, keyword) {
+            const regex = new RegExp(`(${keyword})`, 'gi'); // Global and case insensitive
+            return text.replace(regex, `<span class="highlight">$1</span>`);
+        }
+
+        function clearSearch() {
+            document.getElementById('search-keyword').value = '';
+            document.getElementById('search-results').innerHTML = '';
+            noResultsMessage.style.display = 'none';
+        }
+
         async function loadConversation(selectedDate) {
-
             chatBox.innerHTML = '';
-
             spinner.style.display = 'block';
 
             try {
@@ -120,17 +168,15 @@
             } catch (error) {
                 console.error('Error loading conversation:', error);
                 alert('Could not load conversation history. Please try again.');
+            } finally {
+                spinner.style.display = 'none';
             }
-
-            spinner.style.display = 'none';
         }
 
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
             const message = document.getElementById('user-message').value;
-
             addMessageToChat('user', message);
-
             spinner.style.display = 'block';
 
             try {
@@ -148,7 +194,6 @@
                 }
 
                 const data = await response.json();
-
                 spinner.style.display = 'none';
 
                 if (data.response) {
@@ -159,7 +204,7 @@
                 }
             } catch (error) {
                 console.error('Error during fetch operation:', error);
-                spinner.style.display = 'none';  
+                spinner.style.display = 'none';
                 alert('There was an issue communicating with the server. Please try again later.');
             }
         });
@@ -169,15 +214,13 @@
             messageElement.classList.add('chat-message');
             const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
             const converter = new showdown.Converter();
-
-
             const htmlMessage = converter.makeHtml(message);
             const content = `
                 <div>${htmlMessage}</div>
                 <span class="timestamp">${time}</span>
             `;
 
-            messageElement.innerHTML = content; 
+            messageElement.innerHTML = content;
 
             if (sender === 'user') {
                 messageElement.classList.add('user-message');
@@ -186,8 +229,8 @@
             }
 
             chatBox.appendChild(messageElement);
-            chatBox.scrollTop = chatBox.scrollHeight;  
-            document.getElementById('user-message').value = '';  
+            chatBox.scrollTop = chatBox.scrollHeight;
+            document.getElementById('user-message').value = '';
         }
 
         function showAdditionalInfo(info) {

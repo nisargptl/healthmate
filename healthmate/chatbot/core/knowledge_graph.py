@@ -21,6 +21,8 @@ class KnowledgeGraph:
             """, entity1=entity1, entity2=entity2, relationship=relationship)
 
     def store_entities_and_relationships(self, entities, relationships):
+        if(len(entities) == 0 and len(relationships) == 0):
+            return
         for entity in entities:
             self.create_entity(entity['name'], entity['type'])
         for relationship in relationships:
