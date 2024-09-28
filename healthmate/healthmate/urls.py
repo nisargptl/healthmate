@@ -20,4 +20,7 @@ from django.urls import path, include
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('', include('chatbot.urls')),
+    path('get_conversation_by_date/', include('chatbot.urls')),
+    path('search_conversation_history/', include('chatbot.urls')),  # New URL path for searching
+
 ]

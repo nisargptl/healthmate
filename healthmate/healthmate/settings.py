@@ -15,7 +15,6 @@ import os
 from dotenv import load_dotenv
 
 load_dotenv()
-GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -42,8 +41,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'chatbot',
-    'patients',
-    'appointments',
+    'patients'
 ]
 
 MIDDLEWARE = [
@@ -83,11 +81,11 @@ WSGI_APPLICATION = 'healthmate.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'healthmate_db',
-        'USER': 'postgres',
-        'PASSWORD': 'root',
-        'HOST': 'localhost',
-        'PORT': '5432',
+        'NAME': os.getenv('DB_NAME', 'healthmate_db'),          # Database name
+        'USER': os.getenv('DB_USER', 'postgres'),                # Database user
+        'PASSWORD': os.getenv('DB_PASSWORD', 'root'),            # Database password
+        'HOST': os.getenv('DB_HOST', 'localhost'),               # Database host
+        'PORT': os.getenv('DB_PORT', '5432'),                    # Database port
     }
 }
 

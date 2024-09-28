@@ -27,7 +27,6 @@ NEO4J_USER = os.getenv('NEO4J_USER')
 NEO4J_PASSWORD = os.getenv('NEO4J_PASSWORD')
 
 llm = LLMManager()
-
 kg = KnowledgeGraph(NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD)
 pc = PineconeStore(api_key=PINECONE_API_KEY, index_name="healthmate")
 patient = Patient.objects.get(first_name="John")
@@ -162,9 +161,19 @@ def appt_rescheduler(state):
 
 def assistant(state):
     summary = state.get("summary", "")
-    if summary:
-        system_message = f"Summary of conversation earlier: {summary}"
-        state["messages"] = [SystemMessage(content=system_message)] + state["messages"]
+    patient_context = (
+    f"My name is {patient.first_name} {patient.last_name}. "
+    f"I was born on {patient.date_of_birth.strftime('%Y-%m-%d')}. "
+    f"My phone number is {patient.phone_number}. "
+    f"My email address is {patient.email}. "
+    f"My medical condition is {patient.medical_condition}. "
+    f"I am taking {patient.medication_regimen}. "
+    f"My last appointment was on {patient.last_appointment.strftime('%Y-%m-%d %H:%M')}. "
+    f"My next appointment is on {patient.next_appointment.strftime('%Y-%m-%d %H:%M')} "
+    f"with {patient.doctor_name}."
+        )
+    system_message = f"Summary of conversation earlier: {summary} \n\n Patient context: {patient_context}"
+    state["messages"] = [SystemMessage(content=system_message)] + state["messages"]
     for message in reversed(state["messages"]):
             if isinstance(message, HumanMessage):
                 last_human_message = message.content
@@ -319,18 +328,9 @@ g.add_edge("change_state", "final_state")
 g.add_edge("add_end_tool_message", "final_state")
 g.add_edge("assistant", "final_state")
 g.add_edge("final_state", END)
+
 def compile_graph():
     return g.compile(checkpointer=memory)
 
 def display_graph(graph):
     display(Image(graph.get_graph().draw_mermaid_png()))
-
-
-
-
-
-
-
-
-
-

@@ -9,26 +9,38 @@
     <script src="https://cdn.jsdelivr.net/npm/showdown@1.9.1/dist/showdown.min.js"></script>
 </head>
 <body>
-    <!-- Container to hold chat and additional info -->
     <div class="main-grid-container">
-        <!-- Chatbox Section -->
+        <div class="sidebar-container">
+            <div class="sidebar-header">
+                <h2>Conversation History</h2>
+            </div>
+            <div id="history-dates-sidebar" class="sidebar-content">
+                {% for date in history_dates %}
+                    <button class="history-date" onclick="loadConversation('{{ date }}')">{{ date }}</button>
+                {% endfor %}
+            </div>
+            
+            <div class="search-box">
+                <input type="text" id="search-keyword" placeholder="Search keyword..." />
+                <button onclick="searchConversation()">Search</button>
+            </div>
+
+            <div id="search-results" class="search-results"></div>
+        </div>
+
         <div class="chat-container">
             <div class="chat-header">
                 <h1>Welcome to HealthMate</h1>
             </div>
-
             <div id="chat-box" class="chat-box">
-                <!-- Loading spinner -->
                 <div id="loading-spinner" class="spinner" style="display:none;"></div>
             </div>
-
             <form id="chat-form" class="chat-form">
                 <input type="text" id="user-message" placeholder="Ask something about your health..." required>
                 <button type="submit">Send</button>
             </form>
         </div>
 
-        <!-- Sidebar for additional information -->
         <div id="additional-info-sidebar" class="additional-info-sidebar">
             <div class="sidebar-header">
                 <h2>Additional Information</h2>
@@ -43,18 +55,84 @@
         const spinner = document.getElementById('loading-spinner');
         const additionalInfoSidebar = document.getElementById('additional-info-sidebar');
         const additionalInfoContent = document.getElementById('additional-info-content');
-    
+        async function searchConversation() {
+            const searchKeyword = document.getElementById('search-keyword').value;
+            if (!searchKeyword) return;
+
+            try {
+                const response = await fetch('/search_conversation_history/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                        'X-CSRFToken': '{{ csrf_token }}'
+                    },
+                    body: new URLSearchParams({ search_keyword: searchKeyword })
+                });
+
+                if (!response.ok) {
+                    throw new Error('Failed to search conversation history');
+                }
+
+                const data = await response.json();
+                const searchResults = data.matching_conversations;
+                displaySearchResults(searchResults);
+            } catch (error) {
+                console.error('Error during search operation:', error);
+            }
+        }
+
+        function displaySearchResults(results) {
+            const resultsContainer = document.getElementById('search-results');
+            resultsContainer.innerHTML = '';  
+            results.forEach(result => {
+                const resultItem = document.createElement('div');
+                resultItem.classList.add('result-item');
+                resultItem.innerHTML = `<p><strong>${result.date}</strong> - ${result.sender}: ${result.message}</p>`;
+                resultsContainer.appendChild(resultItem);
+            });
+        }
+        async function loadConversation(selectedDate) {
+
+            chatBox.innerHTML = '';
+
+            spinner.style.display = 'block';
+
+            try {
+                const response = await fetch('/get_conversation_by_date/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                        'X-CSRFToken': '{{ csrf_token }}'
+                    },
+                    body: new URLSearchParams({ selected_date: selectedDate })
+                });
+
+                if (!response.ok) {
+                    throw new Error('Failed to load conversation history');
+                }
+
+                const data = await response.json();
+                const conversation = data.conversation;
+
+                conversation.forEach(message => {
+                    addMessageToChat(message.sender, message.message);
+                });
+            } catch (error) {
+                console.error('Error loading conversation:', error);
+                alert('Could not load conversation history. Please try again.');
+            }
+
+            spinner.style.display = 'none';
+        }
+
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
             const message = document.getElementById('user-message').value;
-    
-            // Add user's message to chat
+
             addMessageToChat('user', message);
-    
-            // Show loading spinner
+
             spinner.style.display = 'block';
-    
-            // Send the message to the backend
+
             try {
                 const response = await fetch('', {
                     method: 'POST',
@@ -62,76 +140,60 @@
                         'Content-Type': 'application/x-www-form-urlencoded',
                         'X-CSRFToken': '{{ csrf_token }}'
                     },
-                    body: new URLSearchParams({ message, patient_email: 'john.doe@example.com' })  // Include patient_email in request
+                    body: new URLSearchParams({ message, patient_email: 'john.doe@example.com' })
                 });
-    
+
                 if (!response.ok) {
-                    throw new Error('Server error or failed response');  // Handle non-200 responses
+                    throw new Error('Server error or failed response');
                 }
-    
+
                 const data = await response.json();
-    
-                // Hide loading spinner
+
                 spinner.style.display = 'none';
-    
-                // Check if bot response exists and is not empty
-                // if (data.response) {
-                //     // Add bot's message to chat only if it's not empty or null
-                addMessageToChat('bot', data.response);
-                // } else {
-                //     console.warn('Empty or null bot response received, not displaying any message.');
-                // }
-    
-                // Display additional information if present
+
+                if (data.response) {
+                    addMessageToChat('bot', data.response);
+                }
                 if (data.additional_info) {
                     showAdditionalInfo(data.additional_info);
                 }
             } catch (error) {
                 console.error('Error during fetch operation:', error);
-                spinner.style.display = 'none';  // Hide spinner in case of error
+                spinner.style.display = 'none';  
                 alert('There was an issue communicating with the server. Please try again later.');
             }
         });
-    
+
         function addMessageToChat(sender, message) {
             const messageElement = document.createElement('div');
             messageElement.classList.add('chat-message');
-    
-            // Get the current time
             const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    
-            // Create a new instance of the showdown converter
             const converter = new showdown.Converter();
-    
-            // Convert the message from Markdown to HTML
+
+
             const htmlMessage = converter.makeHtml(message);
-    
-            // Set innerHTML to render HTML properly
             const content = `
                 <div>${htmlMessage}</div>
                 <span class="timestamp">${time}</span>
             `;
-    
-            messageElement.innerHTML = content;  // Use innerHTML to render the converted HTML
-    
+
+            messageElement.innerHTML = content; 
+
             if (sender === 'user') {
                 messageElement.classList.add('user-message');
             } else {
                 messageElement.classList.add('bot-message');
             }
-    
+
             chatBox.appendChild(messageElement);
-            chatBox.scrollTop = chatBox.scrollHeight;  // Auto scroll to the bottom
-            document.getElementById('user-message').value = '';  // Clear input field
+            chatBox.scrollTop = chatBox.scrollHeight;  
+            document.getElementById('user-message').value = '';  
         }
-    
+
         function showAdditionalInfo(info) {
-            // Display additional information in the sidebar
             additionalInfoContent.innerHTML = `<p>${info}</p>`;
             additionalInfoSidebar.style.display = 'block';
         }
     </script>
-    
-
 </body>
 </html>
