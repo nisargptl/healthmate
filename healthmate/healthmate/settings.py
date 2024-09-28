@@ -81,11 +81,11 @@ WSGI_APPLICATION = 'healthmate.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': os.getenv('DB_NAME', 'healthmate_db'),          # Database name
-        'USER': os.getenv('DB_USER', 'postgres'),                # Database user
-        'PASSWORD': os.getenv('DB_PASSWORD', 'root'),            # Database password
-        'HOST': os.getenv('DB_HOST', 'localhost'),               # Database host
-        'PORT': os.getenv('DB_PORT', '5432'),                    # Database port
+        'NAME': os.environ.get('DATABASE_NAME', 'healthmate_db'),
+        'USER': os.environ.get('DATABASE_USER', 'postgres'),
+        'PASSWORD': os.environ.get('DATABASE_PASSWORD', 'root'),
+        'HOST': os.environ.get('DATABASE_HOST', 'localhost'),
+        'PORT': os.environ.get('DATABASE_PORT', '5432'),
     }
 }
 

@@ -17,6 +17,10 @@ HealthMate is designed to assist users with the following:
 - Escalate change requests in appointments to Doctor.
 - Maintaining conversation histories for easy reference.
 - Using an LLM-agnostic design to swap different language models (e.g., OpenAI’s GPT-4 or Mistral models) with ease.
+- Assistant logic graph:
+![Graph](healthmate/graphs/graph.png)
+- Current Knowledge Graph from conversations:
+![Knowledge Graph](healthmate/graphs/knowledge_graph.png)
 
 ## Key Features
 - **Conversational Health Assistance:** The chatbot can respond to user queries about health and appointments.
