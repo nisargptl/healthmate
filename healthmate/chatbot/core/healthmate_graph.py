@@ -18,15 +18,16 @@ from .pinecone_store import PineconeStore
 from patients.models import Patient
 from datetime import datetime
 from IPython.display import Image, display
+from .llm_adapters.llm_manager import LLMManager
 
-load_dotenv()
-OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
+
 PINECONE_API_KEY = os.getenv('PINECONE_API_KEY')
 NEO4J_URI = os.getenv('NEO4J_URI')
 NEO4J_USER = os.getenv('NEO4J_USER')
 NEO4J_PASSWORD = os.getenv('NEO4J_PASSWORD')
 
-llm = ChatOpenAI(model="gpt-4o-mini",api_key=OPENAI_API_KEY, temperature=0)
+llm = LLMManager()
+
 kg = KnowledgeGraph(NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD)
 pc = PineconeStore(api_key=PINECONE_API_KEY, index_name="healthmate")
 patient = Patient.objects.get(first_name="John")
@@ -63,7 +64,7 @@ def generate_cypher_query_with_llm(user_message, entities, relationships):
     You are an expert in querying graph databases.
     Based on the available entities related to the user in the Neo4j database:
     Entities: {entities}
-    Modify the where condition with OR conditions in the example query below so that it extracts relevant entities from the graph database about user based on a given conversation.
+    Modify the where condition by only using OR conditions in the example query below so that it extracts relevant entities from the graph database about user based on a given conversation.
     Example query:
     MATCH path1 = (u:Entity {{name: 'User', type: 'Person'}})-[*]->(target:Entity)
     WHERE target.type = 'Event' OR target.name = 'Cold'
@@ -75,10 +76,7 @@ def generate_cypher_query_with_llm(user_message, entities, relationships):
     """
     messages = [
         SystemMessage(content=system_message_content)]
-    llm = ChatOpenAI(
-        api_key=OPENAI_API_KEY,
-        model="gpt-4o-mini")
-    response = llm.invoke(messages)
+    response = llm.generate_response(messages, bind_tools=False)
     return response.content
 
 
@@ -140,11 +138,7 @@ def knowledge_extractor(state):
     }}
     """
     messages = [SystemMessage(content=system_message)]
-    llm = ChatOpenAI(
-        api_key=OPENAI_API_KEY,
-        model="gpt-4o-mini",
-    )
-    entities_and_relationships = llm.invoke(messages)
+    entities_and_relationships = llm.generate_response(messages, bind_tools=False)
     data = json.loads(entities_and_relationships.content)
     kg.store_entities_and_relationships(data['entities'], data['relationships'])
     return state
@@ -157,8 +151,9 @@ def appt_rescheduler(state):
     prompt = f"""Today's date is: 09/27/24 and day is: Friday. Gather information about new date and time user wants to reschedule appointment to, once you have it,
                 call the tool with name "change_state_tool" and pass the new time as argument in "%Y-%m-%d %H:%M:%S" format."""
     messages = [SystemMessage(content=prompt)]+state["messages"]
-    llm_with_tool = llm.bind_tools([change_state_tool])
-    response = llm_with_tool.invoke(messages)
+    llm.bind_tools([change_state_tool])
+    response = llm.generate_response(messages, bind_tools=True)
+    llm.reset_tools()
     message_for_next_tool = ""
     if 'tool_calls' in response.additional_kwargs:
         message_for_next_tool = f"""Patient {patient.first_name} {patient.last_name} is requesting an appointment change from {patient.next_appointment} to {extract_state_from_toolcalls(response)}."""
@@ -181,7 +176,7 @@ def assistant(state):
     prompt = f"""You are a health bot assigned to help users with health related queries and give medical advice. Use the following context to assist the user further.
                         If you don't know the answer, just say that you don't know, don't try to make up an answer.
                         Context: {context}"""
-    response = llm.invoke([SystemMessage(content=prompt)] + state["messages"])
+    response = llm.generate_response([SystemMessage(content=prompt)] + state["messages"], bind_tools=False)
     return {"messages": [response], "current_state": "assistant"}
 
 def query_knowledge_graph(state):
@@ -199,7 +194,6 @@ def query_knowledge_graph(state):
 
 
 def orchestrator(state):
-    llm_with_tool = llm.bind_tools([appt_rescheduler_tool, query_knowledge_graph_tool, assistant_tool, end_tool])
     prompt = """You are just an Orchestrator who calls tools, you don't provide any message.
                 Rules to call tools
                 - "appt_rescheduler_tool": If the user wants to schedule or reschedule their appointment.
@@ -207,8 +201,10 @@ def orchestrator(state):
                 - "assistant_tool": If the user message is related to health or friendly talk.
                 - "end_tool": If the user message is off-topic unrelated to health.
                 """
+    llm.bind_tools([appt_rescheduler_tool, query_knowledge_graph_tool, assistant_tool, end_tool])
     messages = [SystemMessage(content=prompt)] + state["messages"]
-    response = llm_with_tool.invoke(messages)
+    response = llm.generate_response(messages, bind_tools=True)
+    llm.reset_tools()
     return {"messages": [response], "current_state": "orchestrator"}
 
 def change_state(state):
@@ -237,7 +233,7 @@ def final_state(state):
             summary_message = "Create a summary of the conversation above:"
 
         messages = state["messages"] + [HumanMessage(content=summary_message)]
-        response = llm.invoke(messages)
+        response = llm.generate_response(messages, bind_tools=False)
         delete_messages = []
         for i, m in enumerate(state["messages"][:-2]):
             delete_messages.append(RemoveMessage(id=m.id))

@@ -1,4 +1,3 @@
-# chatbot/views.py
 from django.shortcuts import render
 from django.http import JsonResponse
 from .core.healthmate_graph import compile_graph, display_graph
@@ -24,15 +23,16 @@ def landing_page(request):
     if request.method == 'POST':
         additional_message = None
         user_message = request.POST.get('message')
-        # print(user_message)
+        bot_response = ""
         if first_user_message==True:
             input_message = {"messages": [HumanMessage(content=user_message)], "current_state":"Orchestrator", "message_counter":0}
             first_user_message=False
         else:
             input_message = {"messages": [HumanMessage(content=user_message)]}
         for output in graph.stream(input_message, config=config, stream_mode="updates"):
-            # print()
-            # print(output)
+            first_value = next(iter(output.values()))
+            if isinstance(first_value['messages'][0], AIMessage) and 'tool_calls' in first_value['messages'][0].additional_kwargs:
+                print(first_value['messages'][0].additional_kwargs['tool_calls'])
             if "final_state" in output:
                 if(summary != output['final_state'].get('summary', [])):
                     summary = output['final_state'].get('summary', [])
@@ -44,7 +44,7 @@ def landing_page(request):
             if 'change_state' in output:
                 bot_response = output['change_state'].get('messages', [])[1].content
                 additional_message = output['change_state'].get('messages', [])[0].content
-        if bot_response:
+        if bot_response != "":
             return JsonResponse({"response": bot_response, "additional_info": additional_message})
         else:
             return JsonResponse({"response": ""})
