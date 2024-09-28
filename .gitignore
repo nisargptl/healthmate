@@ -6,3 +6,4 @@ The Gale Encyclopedia of Diets - A Guide to Health and Nutrition - PDF Room.pdf
 Untitled1.ipynb
 **/__pycache__/*
 *.py[cod]
+**/migrations/*
