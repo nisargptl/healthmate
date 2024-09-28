@@ -46,7 +46,6 @@ def landing_page(request):
             input_message = {"messages": [HumanMessage(content=user_message)]}
 
         for output in graph.stream(input_message, config=config, stream_mode="updates"):
-            print(output)
             if "final_state" in output:
                 if summary != output['final_state'].get('summary', []):
                     summary = output['final_state'].get('summary', [])
@@ -80,7 +79,7 @@ def landing_page(request):
         else:
             return JsonResponse({"response": ""})
 
-    history_dates = ConversationHistory.objects.filter(session_id=session_id).values_list('date', flat=True).distinct()
+    history_dates = ConversationHistory.objects.values_list('date', flat=True).distinct()
     history_dates = list(history_dates) 
     return render(request, 'landing_page.html', {'history_dates': history_dates})
 
@@ -88,7 +87,7 @@ def get_conversation_by_date(request):
     if request.method == 'POST':
         selected_date = request.POST.get('selected_date')
         session_id = request.session.session_key
-        conversations = ConversationHistory.objects.filter(session_id=session_id, date=format_date_to_iso(selected_date)).values('user_message', 'bot_response')
+        conversations = ConversationHistory.objects.filter(date=format_date_to_iso(selected_date)).values('user_message', 'bot_response')
         conversation = []
         for convo in conversations:
             conversation.append({'sender': 'user', 'message': convo['user_message']})

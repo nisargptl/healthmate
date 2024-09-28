@@ -123,7 +123,6 @@ def knowledge_extractor(state):
     human_messages_reversed = []
     for message in reversed(state["messages"]):
         if isinstance(message, HumanMessage):
-            print(f"Message: {message.content}")
             human_messages_reversed.append(message.content)
         if len(human_messages_reversed) == 5: 
             break
@@ -158,11 +157,11 @@ if none return empty JSON:
     """
     messages = [SystemMessage(content=system_message)]
     entities_and_relationships = llm.generate_response(messages, bind_tools=False)
-    print(entities_and_relationships)
     try:
-        if entities_and_relationships.content == "":
+        if "entities" not in entities_and_relationships.content:
             data = {"entities": [], "relationships": []}
-        data = json.loads(entities_and_relationships.content)
+        else:
+            data = json.loads(entities_and_relationships.content)
     except:
         data = {"entities": [], "relationships": []}
     kg.store_entities_and_relationships(data['entities'], data['relationships'])
@@ -328,11 +327,11 @@ def router1(state) -> Literal["orchestrator", "appt_rescheduler", "treatment_cha
 
 def router2(state) -> Literal["add_change_request_tool_message", "add_assistant_tool_message", "query_knowledge_graph", "add_end_tool_message"]:
     messages = state["messages"]
-    if isinstance(messages[-1], AIMessage) and "tool_calls" in messages[-1].additional_kwargs and messages[-1].tool_calls[0].get("name") == "change_request_tool":
+    if isinstance(messages[-1], AIMessage) and ((len(messages[-1].content) ==0 and messages[-1].tool_calls[0].get("name") == "change_request_tool") or ("change_request_tool" in messages[-1].content)):
         return "add_change_request_tool_message"
-    elif isinstance(messages[-1], AIMessage) and "tool_calls" in messages[-1].additional_kwargs and messages[-1].tool_calls[0].get("name") == "query_knowledge_graph_tool":
+    elif isinstance(messages[-1], AIMessage) and ((len(messages[-1].content) ==0 and messages[-1].tool_calls[0].get("name") == "query_knowledge_graph_tool") or ("query_knowledge_graph_tool" in messages[-1].content)):
         return "query_knowledge_graph"
-    elif isinstance(messages[-1], AIMessage) and "tool_calls" in messages[-1].additional_kwargs and messages[-1].tool_calls[0].get("name") == "end_tool":
+    elif isinstance(messages[-1], AIMessage) and ((len(messages[-1].content) ==0 and messages[-1].tool_calls[0].get("name") == "end_tool") or ("end_tool" in messages[-1].content)):
         return "add_end_tool_message"
     return "add_assistant_tool_message"
 

@@ -1,17 +1,30 @@
-# Use an official Python runtime as a parent image
-FROM python:3.12
+# Use the official Python image from the Docker Hub
+FROM python:3.10-slim
 
 # Set the working directory inside the container
 WORKDIR /app
 
-# Copy the current directory contents into the container at /app
-COPY . /app/
+# Copy the requirements file to the container
+COPY requirements.txt .
 
-# Install any dependencies listed in requirements.txt
-RUN pip3 install --no-cache-dir -r requirements.txt
+# Install the dependencies
+RUN pip install --upgrade pip
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Expose port 8000 to allow external traffic
+# Copy the entire Django project to the container
+COPY . .
+
+# Set environment variables
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+# Install PostgreSQL client library
+RUN apt-get update && \
+    apt-get install -y postgresql-client && \
+    rm -rf /var/lib/apt/lists/*
+
+# Expose port 8000 for the Django server
 EXPOSE 8000
 
-# Define the command to run the application
+# Run the Django application
 CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]
