@@ -38,7 +38,7 @@ Follow these instructions to set up the project on your local machine.
 ### Step 1: Clone the Repository
 ```bash
 git clone https://github.com/nisargptl/healthmate.git
-cd healthmate
+cd healthmate/healthmate
 ```
 
 ### Step 2: Set Up a Virtual Environment
