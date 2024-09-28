@@ -147,7 +147,9 @@ def appt_rescheduler(state):
     if summary:
         system_message = f"Summary of conversation earlier: {summary}"
         state["messages"] = [SystemMessage(content=system_message)] + state["messages"]
-    prompt = f"""Today's date is: 09/27/24 and day is: Friday. Gather information about new date and time user wants to reschedule appointment to, once you have it,
+    today_date = datetime.now().strftime("%Y-%m-%d")  # Format as YYYY-MM-DD
+    day_name = datetime.now().strftime("%A") 
+    prompt = f"""Today's date is: {today_date} and day is: {day_name}. Gather information about new date and time user wants to reschedule appointment to, once you have it,
                 call the tool with name "change_state_tool" and pass the new time as argument in "%Y-%m-%d %H:%M:%S" format."""
     messages = [SystemMessage(content=prompt)]+state["messages"]
     llm.bind_tools([change_state_tool])
@@ -236,7 +238,7 @@ def final_state(state):
         if summary:
             summary_message = (
                 f"This is summary of the conversation to date: {summary}\n\n"
-                "Extend the summary by taking into account the new messages above:"
+                "Append to it by taking into account the new messages above, never miss important user information and medical insights:"
             )
         else:
             summary_message = "Create a summary of the conversation above:"
