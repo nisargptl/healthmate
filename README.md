@@ -75,6 +75,7 @@ DB_PASSWORD=<your_db_password>
 Apply the database migrations:
 
 ```bash
+cd healthmate
 python manage.py makemigrations
 python manage.py migrate
 ```
