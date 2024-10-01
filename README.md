@@ -134,17 +134,17 @@ To run the application, follow these steps:
 4. **Additional Information:**
    Any relevant context or additional information will be displayed in the "Additional Information" sidebar.
 
-##Some Feature Examples
-Requesting Appointment changes:
+## Some Feature Examples
+1. Requesting Appointment changes:
 ![Appointment_change_request](Assets/appointment_change.png)
 
-Getting Personal info and health queries:
+2. Getting Personal info and health queries:
 ![Queries](Assets/Info_and_health_query.png)
 
-Requesting Treatment changes:
+3. Requesting Treatment changes:
 ![Treatment_change_request](Assets/treatment_change.png)
 
-Search and filtering unrelated conversations:
+4. Search and filtering unrelated conversations:
 ![Filtering](Assets/unrelated_convo_handle.png)
 
 ## Assumptions
