@@ -70,12 +70,22 @@ PINECONE_API_KEY=<your_pinecone_api_key>
 NEO4J_URI=<your_neo4j_uri>
 NEO4J_USER=<your_neo4j_username>
 NEO4J_PASSWORD=<your_neo4j_password>
-DB_NAME=<db_name> #healthmate_db
+DB_NAME=healthmate_db
 DB_USER=<db_user>
 DB_PASSWORD=<your_db_password>
 ```
 
 ### Step 5: Set Up the Database
+Create Database:
+```bash
+psql -U postgres
+CREATE DATABASE heatlthmate_db;
+CREATE USER yourusername WITH PASSWORD 'yourpassword';
+GRANT ALL PRIVILEGES ON DATABASE healthmate_db TO yourusername;
+ALTER USER yourusername WITH SUPERUSER;
+\q
+```
+
 Apply the database migrations:
 
 ```bash
@@ -123,6 +133,19 @@ To run the application, follow these steps:
 
 4. **Additional Information:**
    Any relevant context or additional information will be displayed in the "Additional Information" sidebar.
+
+##Some Feature Examples
+Requesting Appointment changes:
+![Appointment_change_request](Assets/appointment_change.png)
+
+Getting Personal info and health queries:
+![Queries](Assets/info_and_health_query.png)
+
+Requesting Treatment changes:
+![Treatment_change_request](Assets/treatment_change.png)
+
+Search and filtering unrelated conversations:
+![Filtering](Assets/unrelated_convo_handle.png)
 
 ## Assumptions
 - The `OPENAI_API_KEY`, `PINECONE_API_KEY`, and other environment variables are set correctly in the `.env` file.
