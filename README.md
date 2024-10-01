@@ -139,7 +139,7 @@ Requesting Appointment changes:
 ![Appointment_change_request](Assets/appointment_change.png)
 
 Getting Personal info and health queries:
-![Queries](Assets/info_and_health_query.png)
+![Queries](Assets/Info_and_health_query.png)
 
 Requesting Treatment changes:
 ![Treatment_change_request](Assets/treatment_change.png)
